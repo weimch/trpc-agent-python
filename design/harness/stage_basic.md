@@ -76,22 +76,22 @@ Design decisions:
 
 `_policy/_base.py`
 
-Base policy with four hook methods. Subclasses override to control tool injection, prompt shaping, message composition, and event-time state updates.
+Base policy with three lifecycle hooks. Subclasses override these hooks to control per-run plan assembly, loop control, and post-run bookkeeping.
 
 ```python
 class HarnessPolicy:
-    build_tools(ctx, workspace) -> list[BaseTool]
-    build_system_prompt(ctx, workspace, origin_prompt) -> str
-    build_messages(ctx, workspace) -> Optional[list[Content]]
-    on_event(ctx, workspace, event) -> None
+    before_run(ctx, workspace, origin_prompt) -> PolicyPlan
+    on_event(ctx, workspace, event, iteration) -> LoopControl | None
+    # NOTE: on_event is called only for non-partial events.
+    after_run(ctx, workspace, outcome: RunOutcome) -> None
 ```
 
 Design decisions:
-- Hook-based rather than monolithic: each concern (tools, prompt, messages, events) is a separate override point. Policies can override one hook without touching others.
-- `build_system_prompt` receives `origin_prompt` (user's base instruction) and returns the final prompt. This lets policies augment rather than replace the instruction.
-- `build_messages` returns `None` to use the default session messages, or a list to override. This is the extension point for future summarization/compaction.
-- `on_event` is fire-and-forget observation. Policies can track state (e.g., token counts, tool call history) without blocking the event stream.
-- Base class provides pass-through defaults so minimal policies only need to override `build_tools`.
+- `before_run` centralizes policy wiring into one object (`PolicyPlan`): tools, prompt, messages, and loop knobs are assembled together for one invocation.
+- `on_event` returns `LoopControl` to decide loop continuation. This moves OpenClaw-style stop/continue logic into policy.
+- `on_event` runs on non-partial events only, so policy logic does not depend on token streaming noise.
+- `after_run` receives `RunOutcome` (nanobot-aligned naming, similar role to `AgentRunResult`) for cleanup/metrics/memory triggers.
+- Base class provides pass-through defaults so minimal policies can override only `before_run`.
 
 ## Agent Loop
 
@@ -99,7 +99,7 @@ Design decisions:
 
 `_agent.py`
 
-`HarnessAgent` extends `BaseAgent` and wraps an internal `LlmAgent`. It does not run its own iteration loop — it delegates to the inner agent's tool-reaction loop and intercepts the event stream.
+`HarnessAgent` extends `BaseAgent` and wraps an internal `LlmAgent`. In step 0, it delegates to the inner loop. In later stages, it can run a policy-managed outer loop for OpenClaw-like bounded iterations.
 
 ```python
 class HarnessAgent(BaseAgent):
@@ -114,29 +114,32 @@ class HarnessAgent(BaseAgent):
 **Invocation flow** (`_run_async_impl`):
 
 ```
-1. Build tools:    policy.build_tools(ctx, workspace) + user tools → _inner_agent.tools
-2. Build messages: policy.build_messages(ctx, workspace) → override_messages
-3. Flush state:    if state_delta accumulated during build, yield state update event
-4. Run inner:      _inner_agent.run_async(inner_context)
-5. Stream events:  for each event from inner agent:
-                     → policy.on_event(ctx, workspace, event)
-                     → merge any state_delta into event
-                     → yield event
-                     → stop on LongRunningEvent or transfer
+1. Resolve base instruction value (static or callback result)
+2. Build plan:    policy.before_run(ctx, workspace, origin_prompt) → PolicyPlan
+3. Apply plan:    _inner_agent tools/prompt/messages/loop settings from plan
+4. Outer loop:    run inner agent in single-round mode (disable_react_tool=True)
+5. Stream events: for each event from inner agent:
+                    → if event.partial: passthrough only
+                    → else:
+                       - decision = policy.on_event(ctx, workspace, event, iteration)
+                       - merge state_delta and yield event
+6. Stop when:     decision=FINISH/ABORT, no new tool calls, transfer/long-running, or max_iterations reached
+7. Finalize:      policy.after_run(ctx, workspace, RunOutcome(...))
 ```
 
-**Instruction merging** (`_merge_instruction`):
+**Instruction handling** (`before_run` owns final prompt):
 
-The user's instruction (static string or async callback) is wrapped into an async callback that:
+The user's instruction (static string or async callback) is first resolved by `HarnessAgent`, then passed into `before_run`:
 1. Resolves the base instruction value
-2. Passes it through `policy.build_system_prompt(ctx, workspace, value)`
-3. Returns the policy-augmented prompt to the inner `LlmAgent`
+2. `before_run` returns `PolicyPlan.system_prompt`
+3. `HarnessAgent` applies the plan's prompt to inner `LlmAgent`
 
-This callback is set as the inner agent's `instruction` at init time and evaluated per-invocation by the framework.
+This keeps all policy-level prompt/tool/message setup in one hook instead of splitting logic across multiple methods.
 
 Design decisions:
-- No outer while-loop — the inner `LlmAgent` handles its own tool-reaction cycle. The harness layer is a single-pass wrapper that shapes inputs and observes outputs.
-- State delta flushing happens both before the inner run (from build-phase side effects) and during streaming (from on_event side effects).
+- Default path can still use pass-through behavior, but managed-loop mode is the extension point used by OpenClaw-like policy.
+- Three-hook policy surface keeps the policy API small while still expressing OpenClaw loop control.
+- State delta flushing happens both before the inner run (from `before_run` side effects) and during streaming (from `on_event` side effects).
 - `_build_inner_context` creates a copy of the invocation context with the inner agent and override messages. This ensures the inner agent sees itself as the active agent.
 
 ## Tool Pattern
@@ -168,14 +171,13 @@ Design decisions:
 
 `_policy/_openclaw.py`
 
-Minimal policy that wires the seven workspace tools and appends execution guidance to the system prompt.
+Minimal policy that wires the seven workspace tools and appends execution guidance to the system prompt through `before_run`.
 
-- `build_tools`: returns all seven workspace tools
-- `build_system_prompt`: appends workspace root path and tool usage guidance to the base instruction
-- `build_messages`: pass-through (returns `ctx.override_messages`)
-- `on_event`: no-op
+- `before_run`: returns `PolicyPlan` with all seven workspace tools and prompt guidance
+- `on_event`: no-op loop decision (`None`, equivalent to CONTINUE)
+- `after_run`: no-op
 
-This is intentionally lightweight — it demonstrates the policy pattern and provides a functional baseline. OpenClaw-specific behaviors (memory consolidation, iteration budget, security controls) are planned for step 2.
+This is intentionally lightweight — it demonstrates the policy pattern and provides a functional baseline. OpenClaw-specific behaviors (managed loop, iteration budget, error hints, memory strategy) are documented in step 2.
 
 ## Public Exports
 

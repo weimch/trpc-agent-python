@@ -98,11 +98,10 @@ The harness should provide the following capabilities:
 │  ┌────────────────────────────────────────────────────────────────────┐  │
 │  │ HarnessPolicy (hook-based extension model)                         │  │
 │  │                                                                    │  │
-│  │  Policies compose capabilities and summarization into four hooks:  │  │
-│  │    - system prompt shaping (augment instruction with policy state) │  │
-│  │    - tool injection (select capability-specific tools per turn)    │  │
-│  │    - message composition (shape/override conversation history)     │  │
-│  │    - event observation (react to streamed events, update state)    │  │
+│  │  Three-hook policy model (OpenClaw-oriented):                        │  │
+│  │    - before_run  -> PolicyPlan (prompt/tools/messages/loop config)  │  │
+│  │    - on_event    -> LoopControl (non-partial events only)           │  │
+│  │    - after_run   -> finalize with RunOutcome                        │  │
 │  │                                                                    │  │
 │  │  Policy profiles (e.g. OpenClaw, Deep, custom) differ in which    │  │
 │  │  capabilities they activate and which summarization strategy       │  │
@@ -113,8 +112,9 @@ The harness should provide the following capabilities:
 │  ┌────────────────────────────────────────────────────────────────────┐  │
 │  │ _inner_agent: LlmAgent                                             │  │
 │  │                                                                    │  │
-│  │  Receives policy-shaped instruction, tools, and messages.          │  │
-│  │  Handles its own tool-reaction loop internally.                    │  │
+│  │  Receives policy-shaped instruction, tools, and messages.           │  │
+│  │  Default: internal tool-reaction loop. Managed mode: one-round loop │  │
+│  │  per call, with outer iteration control owned by HarnessAgent.      │  │
 │  └───────────────────────────┬────────────────────────────────────────┘  │
 │                              │ file/shell tools route through            │
 │                              ▼                                           │
@@ -147,4 +147,4 @@ The harness should provide the following capabilities:
   └─────────────────┘  └─────────────────┘  └─────────────────────┘
 ```
 
-**How it connects**: `Runner` creates `InvocationContext` with `session_service`, `memory_service`, and `session`. The `Workspace` provides filesystem and shell execution scoped to a root directory. Policies use hook methods to shape the system prompt, select tools, manage conversation history, and react to events — composing capabilities and summarization strategies appropriate to the policy profile. Future workspace evolution will add virtual path routing so the LLM sees a unified filesystem while harness state (memory, history) is backed by the framework's persistence services.
+**How it connects**: `Runner` creates `InvocationContext` with `session_service`, `memory_service`, and `session`. The `Workspace` provides filesystem and shell execution scoped to a root directory. Policies drive execution through three hooks: `before_run` builds `PolicyPlan`, `on_event` returns `LoopControl` for non-partial events, and `after_run` receives `RunOutcome` for post-run handling. Future workspace evolution will add virtual path routing so the LLM sees a unified filesystem while harness state (memory, history) is backed by the framework's persistence services.
