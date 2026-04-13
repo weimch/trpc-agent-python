@@ -1,2 +1,2 @@
 - The Design act as the overall direction about this module and should not place the interface design and impelmentation details here.
-- The document start with bumber is the actually interface design and impelment notice
+- The document start with stage is the actually interface design and impelment notice
