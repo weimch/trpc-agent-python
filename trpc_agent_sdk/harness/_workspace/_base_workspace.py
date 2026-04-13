@@ -53,5 +53,8 @@ class BaseWorkspace(ABC):
 
         Returns:
             str: User-facing command output message.
+
+        Raises:
+            Exception: Implementations should raise on operation failure.
         """
         ...

@@ -54,6 +54,9 @@ class BaseFilesystem(ABC):
 
         Returns:
             str: Formatted file content.
+
+        Raises:
+            Exception: Implementations should raise on operation failure.
         """
         ...
 
@@ -67,6 +70,9 @@ class BaseFilesystem(ABC):
 
         Returns:
             str: User-facing operation result.
+
+        Raises:
+            Exception: Implementations should raise on operation failure.
         """
         ...
 
@@ -82,6 +88,9 @@ class BaseFilesystem(ABC):
 
         Returns:
             str: User-facing operation result.
+
+        Raises:
+            Exception: Implementations should raise on operation failure.
         """
         ...
 
@@ -96,6 +105,9 @@ class BaseFilesystem(ABC):
 
         Returns:
             str: Formatted directory listing.
+
+        Raises:
+            Exception: Implementations should raise on operation failure.
         """
         ...
 
@@ -109,6 +121,9 @@ class BaseFilesystem(ABC):
 
         Returns:
             str: Formatted matching file list.
+
+        Raises:
+            Exception: Implementations should raise on operation failure.
         """
         ...
 
@@ -130,5 +145,8 @@ class BaseFilesystem(ABC):
 
         Returns:
             str: Formatted search output.
+
+        Raises:
+            Exception: Implementations should raise on operation failure.
         """
         ...

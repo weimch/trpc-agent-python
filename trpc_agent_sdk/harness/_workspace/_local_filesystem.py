@@ -84,9 +84,9 @@ def _not_found_msg(old_text: str, content: str, path: str) -> str:
                 tofile=f"{path} (actual, line {best_start + 1})",
                 lineterm="",
             ))
-        return (f"Error: old_text not found in {path}.\n"
+        return (f"old_text not found in {path}.\n"
                 f"Best match ({best_ratio:.0%} similar) at line {best_start + 1}:\n{diff}")
-    return f"Error: old_text not found in {path}. No similar text found. Verify the file content."
+    return f"old_text not found in {path}. No similar text found. Verify the file content."
 
 
 class LocalFilesystem(BaseFilesystem):
@@ -155,48 +155,49 @@ class LocalFilesystem(BaseFilesystem):
             limit: Optional maximum number of lines to return.
 
         Returns:
-            str: Numbered file content or error message.
+            str: Numbered file content.
         """
+        fp = self.resolve_path(path)
+        if not fp.exists():
+            raise FileNotFoundError(f"File not found: {path}")
+        if not fp.is_file():
+            raise IsADirectoryError(f"Not a file: {path}")
+
         try:
-            fp = self.resolve_path(path)
-            if not fp.exists():
-                return f"Error: File not found: {path}"
-            if not fp.is_file():
-                return f"Error: Not a file: {path}"
-
             lines = fp.read_text(encoding="utf-8").splitlines()
-            total = len(lines)
-            if total == 0:
-                return f"(Empty file: {path})"
-
-            if offset < 1:
-                offset = 1
-            if offset > total:
-                return f"Error: offset {offset} is beyond end of file ({total} lines)"
-
-            start = offset - 1
-            end = min(start + (limit or self._DEFAULT_READ_LIMIT), total)
-            numbered = [f"{start + idx + 1}| {line}" for idx, line in enumerate(lines[start:end])]
-            result = "\n".join(numbered)
-
-            if len(result) > self._MAX_READ_CHARS:
-                trimmed: list[str] = []
-                current = 0
-                for line in numbered:
-                    current += len(line) + 1
-                    if current > self._MAX_READ_CHARS:
-                        break
-                    trimmed.append(line)
-                end = start + len(trimmed)
-                result = "\n".join(trimmed)
-
-            if end < total:
-                result += f"\n\n(Showing lines {offset}-{end} of {total}. Use offset={end + 1} to continue.)"
-            else:
-                result += f"\n\n(End of file — {total} lines total)"
-            return result
         except Exception as ex:  # pylint: disable=broad-except
-            return f"Error reading file: {ex}"
+            raise RuntimeError(f"Failed to read file '{path}': {ex}") from ex
+
+        total = len(lines)
+        if total == 0:
+            return f"(Empty file: {path})"
+
+        if offset < 1:
+            offset = 1
+        if offset > total:
+            raise ValueError(f"offset {offset} is beyond end of file ({total} lines)")
+
+        start = offset - 1
+        end = min(start + (limit or self._DEFAULT_READ_LIMIT), total)
+        numbered = [f"{start + idx + 1}| {line}" for idx, line in enumerate(lines[start:end])]
+        result = "\n".join(numbered)
+
+        if len(result) > self._MAX_READ_CHARS:
+            trimmed: list[str] = []
+            current = 0
+            for line in numbered:
+                current += len(line) + 1
+                if current > self._MAX_READ_CHARS:
+                    break
+                trimmed.append(line)
+            end = start + len(trimmed)
+            result = "\n".join(trimmed)
+
+        if end < total:
+            result += f"\n\n(Showing lines {offset}-{end} of {total}. Use offset={end + 1} to continue.)"
+        else:
+            result += f"\n\n(End of file — {total} lines total)"
+        return result
 
     async def write_file(self, path: str, content: str) -> str:
         """Write text content to a file.
@@ -208,13 +209,13 @@ class LocalFilesystem(BaseFilesystem):
         Returns:
             str: Operation result message.
         """
+        fp = self.resolve_path(path)
         try:
-            fp = self.resolve_path(path)
             fp.parent.mkdir(parents=True, exist_ok=True)
             fp.write_text(content, encoding="utf-8")
-            return f"Successfully wrote {len(content)} bytes to {fp}"
         except Exception as ex:  # pylint: disable=broad-except
-            return f"Error writing file: {ex}"
+            raise RuntimeError(f"Failed to write file '{path}': {ex}") from ex
+        return f"Successfully wrote {len(content)} bytes to {fp}"
 
     async def edit_file(self, path: str, old_text: str, new_text: str, replace_all: bool = False) -> str:
         """Edit a file by replacing target text with new text.
@@ -228,37 +229,43 @@ class LocalFilesystem(BaseFilesystem):
         Returns:
             str: Operation result message.
         """
+        if old_text == "":
+            raise ValueError("old_text must not be empty")
+
+        fp = self.resolve_path(path)
+        if not fp.exists():
+            raise FileNotFoundError(f"File not found: {path}")
+        if not fp.is_file():
+            raise IsADirectoryError(f"Not a file: {path}")
+
         try:
-            if old_text == "":
-                return "Error: old_text must not be empty"
-
-            fp = self.resolve_path(path)
-            if not fp.exists():
-                return f"Error: File not found: {path}"
-
             raw = fp.read_bytes()
-            uses_crlf = b"\r\n" in raw
-            content = raw.decode("utf-8").replace("\r\n", "\n")
-
-            match, count = _find_match(content, old_text.replace("\r\n", "\n"))
-            if match is None:
-                return _not_found_msg(old_text, content, path)
-            if count > 1 and not replace_all:
-                return (f"Warning: old_text appears {count} times. "
-                        "Provide more context to make it unique, or set replace_all=true.")
-
-            normalized_new = new_text.replace("\r\n", "\n")
-            if replace_all:
-                new_content = content.replace(match, normalized_new)
-            else:
-                new_content = content.replace(match, normalized_new, 1)
-
-            if uses_crlf:
-                new_content = new_content.replace("\n", "\r\n")
-            fp.write_bytes(new_content.encode("utf-8"))
-            return f"Successfully edited {fp}"
         except Exception as ex:  # pylint: disable=broad-except
-            return f"Error editing file: {ex}"
+            raise RuntimeError(f"Failed to read file '{path}' for editing: {ex}") from ex
+
+        uses_crlf = b"\r\n" in raw
+        content = raw.decode("utf-8").replace("\r\n", "\n")
+
+        match, count = _find_match(content, old_text.replace("\r\n", "\n"))
+        if match is None:
+            raise ValueError(_not_found_msg(old_text, content, path))
+        if count > 1 and not replace_all:
+            raise ValueError(f"old_text appears {count} times. Provide more context to make it unique, "
+                             "or set replace_all=true.")
+
+        normalized_new = new_text.replace("\r\n", "\n")
+        if replace_all:
+            new_content = content.replace(match, normalized_new)
+        else:
+            new_content = content.replace(match, normalized_new, 1)
+
+        if uses_crlf:
+            new_content = new_content.replace("\n", "\r\n")
+        try:
+            fp.write_bytes(new_content.encode("utf-8"))
+        except Exception as ex:  # pylint: disable=broad-except
+            raise RuntimeError(f"Failed to write edited file '{path}': {ex}") from ex
+        return f"Successfully edited {fp}"
 
     async def list_dir(self, path: str, recursive: bool = False, max_entries: int = 200) -> str:
         """List directory entries with optional recursive traversal.
@@ -269,15 +276,15 @@ class LocalFilesystem(BaseFilesystem):
             max_entries: Maximum entries to include in output.
 
         Returns:
-            str: Formatted listing or error message.
+            str: Formatted listing.
         """
-        try:
-            dp = self.resolve_path(path)
-            if not dp.exists():
-                return f"Error: Directory not found: {path}"
-            if not dp.is_dir():
-                return f"Error: Not a directory: {path}"
+        dp = self.resolve_path(path)
+        if not dp.exists():
+            raise FileNotFoundError(f"Directory not found: {path}")
+        if not dp.is_dir():
+            raise NotADirectoryError(f"Not a directory: {path}")
 
+        try:
             cap = (min(max_entries, self._MAX_LIST_ENTRIES) if max_entries > 0 else self._MAX_LIST_ENTRIES)
             items: list[str] = []
             total = 0
@@ -297,16 +304,16 @@ class LocalFilesystem(BaseFilesystem):
                     total += 1
                     if len(items) < cap:
                         items.append(f"D {item.name}" if item.is_dir() else f"F {item.name}")
-
-            if total == 0:
-                return f"Directory {path} is empty"
-
-            result = "\n".join(items)
-            if total > cap:
-                result += f"\n\n(truncated, showing first {cap} of {total} entries)"
-            return result
         except Exception as ex:  # pylint: disable=broad-except
-            return f"Error listing directory: {ex}"
+            raise RuntimeError(f"Failed to list directory '{path}': {ex}") from ex
+
+        if total == 0:
+            return f"Directory {path} is empty"
+
+        result = "\n".join(items)
+        if total > cap:
+            result += f"\n\n(truncated, showing first {cap} of {total} entries)"
+        return result
 
     async def glob(self, pattern: str, path: str = ".") -> str:
         """Return files matching a glob pattern from a base directory.
@@ -316,35 +323,35 @@ class LocalFilesystem(BaseFilesystem):
             path: Base directory path.
 
         Returns:
-            str: Newline-delimited matching file paths or an error.
+            str: Newline-delimited matching file paths.
         """
+        if not pattern:
+            raise ValueError("pattern is required")
+
+        base = self.resolve_path(path)
+        if not base.exists():
+            raise FileNotFoundError(f"Directory not found: {path}")
+        if not base.is_dir():
+            raise NotADirectoryError(f"Not a directory: {path}")
+
         try:
-            if not pattern:
-                return "Error: pattern is required"
-
-            base = self.resolve_path(path)
-            if not base.exists():
-                return f"Error: Directory not found: {path}"
-            if not base.is_dir():
-                return f"Error: Not a directory: {path}"
-
             if Path(pattern).is_absolute():
                 matches = [Path(m) for m in pyglob.glob(pattern, recursive=True) if Path(m).is_file()]
             else:
                 matches = [Path(m) for m in collect_files_with_glob(base.as_posix(), pattern)]
-
-            if not matches:
-                return "No files found."
-
-            rows: list[str] = []
-            for match in sorted(set(matches)):
-                try:
-                    rows.append(match.relative_to(base).as_posix())
-                except ValueError:
-                    rows.append(match.as_posix())
-            return "\n".join(rows)
         except Exception as ex:  # pylint: disable=broad-except
-            return f"Error globbing files: {ex}"
+            raise RuntimeError(f"Failed to glob files with pattern '{pattern}': {ex}") from ex
+
+        if not matches:
+            return "No files found."
+
+        rows: list[str] = []
+        for match in sorted(set(matches)):
+            try:
+                rows.append(match.relative_to(base).as_posix())
+            except ValueError:
+                rows.append(match.as_posix())
+        return "\n".join(rows)
 
     async def grep(
         self,
@@ -362,17 +369,17 @@ class LocalFilesystem(BaseFilesystem):
             output_mode: Output format for search results.
 
         Returns:
-            str: Search results or an error message.
+            str: Search results.
         """
         if not pattern:
-            return "Error: pattern is required"
+            raise ValueError("pattern is required")
 
         base = self.resolve_path(path or ".")
         if not base.exists():
-            return f"Error: path not found: {path or '.'}"
+            raise FileNotFoundError(f"path not found: {path or '.'}")
 
         if output_mode not in {"files_with_matches", "content", "count"}:
-            return f"Error: unsupported output_mode '{output_mode}'"
+            raise ValueError(f"unsupported output_mode '{output_mode}'")
 
         cmd = ["rg", "--no-messages"]
         if output_mode == "files_with_matches":
@@ -392,14 +399,16 @@ class LocalFilesystem(BaseFilesystem):
                 return "No matches found."
             if process.returncode > 1:
                 stderr = process.stderr.strip() if process.stderr else "unknown error"
-                return f"Error running grep: {stderr}"
+                raise RuntimeError(f"grep failed: {stderr}")
 
             output = (process.stdout or "").strip()
             return output or "No matches found."
-        except FileNotFoundError:
+        except FileNotFoundError as ex:
+            if ex.filename and ex.filename != "rg":
+                raise
             return self._grep_python_fallback(pattern=pattern, base=base, glob_pattern=glob, output_mode=output_mode)
         except Exception as ex:  # pylint: disable=broad-except
-            return f"Error running grep: {ex}"
+            raise RuntimeError(f"Failed to run grep: {ex}") from ex
 
     def _grep_python_fallback(
         self,
@@ -417,12 +426,12 @@ class LocalFilesystem(BaseFilesystem):
             output_mode: Output format for search results.
 
         Returns:
-            str: Search results or an error message.
+            str: Search results.
         """
         try:
             regex = re.compile(pattern)
         except re.error as ex:
-            return f"Error: invalid regex pattern: {ex}"
+            raise ValueError(f"invalid regex pattern: {ex}") from ex
 
         files: list[Path] = []
         if base.is_file():

@@ -6,9 +6,17 @@
 """Harness policy exports."""
 
 from ._base import HarnessPolicy
+from ._base import LoopControl
+from ._base import PolicyPlan
+from ._base import RunOutcome
 from ._openclaw import OpenClawPolicy
+from ._openclaw import OpenClawPolicyConfig
 
 __all__ = [
     "HarnessPolicy",
+    "PolicyPlan",
+    "LoopControl",
+    "RunOutcome",
     "OpenClawPolicy",
+    "OpenClawPolicyConfig",
 ]

@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from enum import Enum
 from typing import Optional
 
 from trpc_agent_sdk.context import InvocationContext
@@ -17,39 +19,71 @@ from trpc_agent_sdk.types import Content
 from .._workspace import BaseWorkspace
 
 
+@dataclass(slots=True)
+class PolicyPlan:
+    """Per-run policy plan resolved in ``before_run``."""
+
+    system_prompt: str
+    tools: list[BaseTool]
+    override_messages: Optional[list[Content]] = None
+    max_iterations: int = 12
+    parallel_tool_calls: bool = False
+    error_retry_hint: Optional[str] = None
+
+
+class LoopControl(str, Enum):
+    """Loop control decisions returned by ``on_event``."""
+
+    CONTINUE = "continue"
+    FINISH = "finish"
+    ABORT = "abort"
+
+
+@dataclass(slots=True)
+class RunOutcome:
+    """Outcome summary passed into ``after_run``."""
+
+    final_content: Optional[str]
+    stop_reason: str
+    iterations: int
+    tools_used: list[str]
+
+
 class HarnessPolicy:
-    """Base policy hooks used by ``HarnessAgent``.
+    """Three-hook policy interface used by ``HarnessAgent``."""
 
-    Subclasses can override these methods to control tool injection, prompt
-    shaping, message composition, and event-time state updates.
-    """
-
-    async def build_tools(self, ctx: InvocationContext, workspace: BaseWorkspace) -> list[BaseTool]:
-        """Build tools injected into ``HarnessAgent`` for this invocation."""
-        return []
-
-    async def build_system_prompt(
+    async def before_run(
         self,
         ctx: InvocationContext,  # pylint: disable=unused-argument
         workspace: BaseWorkspace,  # pylint: disable=unused-argument
-        origin_prompt: str,
-    ) -> str:
-        """Return final system prompt text used by the inner LLM agent."""
-        return origin_prompt
-
-    async def build_messages(
-            self,
-            ctx: InvocationContext,
-            workspace: BaseWorkspace,  # pylint: disable=unused-argument
-    ) -> Optional[list[Content]]:
-        """Return override messages used for the internal LLM call."""
-        return ctx.override_messages
+        origin_prompt: str = "",
+    ) -> PolicyPlan:
+        """Build a policy plan for one harness invocation."""
+        return PolicyPlan(
+            system_prompt=origin_prompt,
+            tools=[],
+            override_messages=ctx.override_messages,
+        )
 
     async def on_event(
-            self,
-            ctx: InvocationContext,  # pylint: disable=unused-argument
-            workspace: BaseWorkspace,  # pylint: disable=unused-argument
-            event: Event,  # pylint: disable=unused-argument
+        self,
+        ctx: InvocationContext,  # pylint: disable=unused-argument
+        workspace: BaseWorkspace,  # pylint: disable=unused-argument
+        event: Event,  # pylint: disable=unused-argument
+        iteration: int = 0,  # pylint: disable=unused-argument
+    ) -> Optional[LoopControl]:
+        """Observe non-partial events and optionally control loop progress.
+
+        NOTE:
+            ``HarnessAgent`` only calls this hook for non-partial events.
+        """
+        return None
+
+    async def after_run(
+        self,
+        ctx: InvocationContext,  # pylint: disable=unused-argument
+        workspace: BaseWorkspace,  # pylint: disable=unused-argument
+        outcome: RunOutcome | None = None,  # pylint: disable=unused-argument
     ) -> None:
-        """Observe each streamed event and optionally update policy state."""
+        """Post-run hook for final bookkeeping (metrics/memory/etc.)."""
         return None
