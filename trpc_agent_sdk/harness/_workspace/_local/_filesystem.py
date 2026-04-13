@@ -15,8 +15,8 @@ from typing import Optional
 
 from trpc_agent_sdk.code_executors.utils import collect_files_with_glob
 
-from ._base_filesystem import BaseFilesystem
-from ._base_filesystem import GrepOutputMode
+from .._base_filesystem import BaseFilesystem
+from .._base_filesystem import GrepOutputMode
 
 
 def _find_match(content: str, old_text: str) -> tuple[Optional[str], int]:

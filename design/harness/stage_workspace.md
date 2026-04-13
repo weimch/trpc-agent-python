@@ -6,7 +6,7 @@ Document the concrete workspace and filesystem implementations that back the abs
 
 ## LocalFilesystem
 
-`_workspace/_local_filesystem.py`
+`_workspace/_local/_filesystem.py`
 
 Filesystem implementation rooted at a local host directory. All operations resolve paths against this root.
 
@@ -79,7 +79,7 @@ Fallback: if `rg` is not installed (`FileNotFoundError`), uses a pure-Python imp
 
 ## LocalWorkspace
 
-`_workspace/_local_workspace.py`
+`_workspace/_local/_workspace.py`
 
 Local workspace that composes `LocalFilesystem` + `LocalProgramRunner` from the framework's code executor runtime.
 

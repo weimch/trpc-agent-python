@@ -8,8 +8,8 @@
 from ._base_filesystem import BaseFilesystem
 from ._base_filesystem import GrepOutputMode
 from ._base_workspace import BaseWorkspace
-from ._local_filesystem import LocalFilesystem
-from ._local_workspace import LocalWorkspace
+from ._local import LocalFilesystem
+from ._local import LocalWorkspace
 
 __all__ = [
     "BaseFilesystem",

@@ -14,9 +14,9 @@ from trpc_agent_sdk.code_executors import WorkspaceInfo
 from trpc_agent_sdk.code_executors import WorkspaceRunProgramSpec
 from trpc_agent_sdk.code_executors.local import LocalProgramRunner
 
-from ._base_filesystem import BaseFilesystem
-from ._base_workspace import BaseWorkspace
-from ._local_filesystem import LocalFilesystem
+from .._base_filesystem import BaseFilesystem
+from .._base_workspace import BaseWorkspace
+from ._filesystem import LocalFilesystem
 
 
 class LocalWorkspace(BaseWorkspace):

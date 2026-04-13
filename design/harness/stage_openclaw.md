@@ -115,7 +115,7 @@ Controlled by `PolicyPlan.error_retry_hint`.
 
 ### Config Object
 
-`_policy/_openclaw.py`
+`_policy/_openclaw/_policy.py`
 
 ```python
 class OpenClawPolicyConfig(BaseModel):
