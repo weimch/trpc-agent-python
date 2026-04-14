@@ -16,6 +16,7 @@ from trpc_agent_sdk.events import Event
 from trpc_agent_sdk.tools import BaseTool
 from trpc_agent_sdk.types import Content
 
+from .._core import ToolCallGate
 from .._workspace import BaseWorkspace
 
 
@@ -25,6 +26,7 @@ class PolicyPlan:
 
     system_prompt: str
     tools: list[BaseTool]
+    tool_call_gates: dict[str, ToolCallGate]
     override_messages: Optional[list[Content]] = None
     max_iterations: int = 12
     parallel_tool_calls: bool = False
@@ -62,6 +64,7 @@ class HarnessPolicy:
         return PolicyPlan(
             system_prompt=origin_prompt,
             tools=[],
+            tool_call_gates={},
             override_messages=ctx.override_messages,
         )
 

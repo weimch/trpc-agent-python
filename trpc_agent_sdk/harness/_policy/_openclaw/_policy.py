@@ -95,6 +95,7 @@ class OpenClawPolicy(HarnessPolicy):
         return PolicyPlan(
             system_prompt=f"{base_instruction}\n\n{appendix}",
             tools=tools,
+            tool_call_gates={},
             override_messages=ctx.override_messages,
             max_iterations=self._config.max_iterations,
             parallel_tool_calls=False,

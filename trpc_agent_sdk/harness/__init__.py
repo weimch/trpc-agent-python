@@ -6,6 +6,10 @@
 """Harness package exports."""
 
 from ._agent import HarnessAgent
+from ._core import ToolCallConfirm
+from ._core import ToolCallConfirmEvent
+from ._core import ToolCallGate
+from ._core import ToolCallGateAction
 from ._workspace import BaseFilesystem
 from ._workspace import BaseWorkspace
 from ._workspace import GrepOutputMode
@@ -25,6 +29,10 @@ __all__ = [
     "HarnessAgent",
     "HarnessPolicy",
     "OpenClawPolicy",
+    "ToolCallGate",
+    "ToolCallGateAction",
+    "ToolCallConfirmEvent",
+    "ToolCallConfirm",
     "BaseFilesystem",
     "BaseWorkspace",
     "GrepOutputMode",

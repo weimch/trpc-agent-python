@@ -253,6 +253,13 @@ class LlmAgent(BaseAgent):
     continuing the conversation with the tool results.
     """
 
+    disable_tool_execution: bool = False
+    """When True, skip tool execution after collecting tool calls.
+
+    This mode allows external orchestrators (for example HarnessAgent) to inspect
+    and execute tool calls outside the internal LLM loop.
+    """
+
     default_transfer_message: Optional[str] = None
     """Controls whether default transfer instructions are added.
 
@@ -541,6 +548,9 @@ class LlmAgent(BaseAgent):
 
                 # Step 3: Execute tools if any were collected
                 if collected_tool_calls:
+                    if self.disable_tool_execution:
+                        logger.debug("disable_tool_execution set, returning before tool execution")
+                        return
                     logger.debug("Executing %s tool calls", len(collected_tool_calls))
                     logger.debug("Executing %s tool calls", len(collected_tool_calls))
 

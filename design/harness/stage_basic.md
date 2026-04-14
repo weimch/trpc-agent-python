@@ -286,12 +286,12 @@ class ToolCallGateAction:
 #### Callback types
 
 ```python
-BeforeCallGateFn = Callable[[str, dict[str, Any]], ToolCallGateAction]
-AfterCallGateFn = Callable[[str, dict[str, Any], Any], Any]
+BeforeToolCallGateFn = Callable[[str, dict[str, Any]], ToolCallGateAction]
+AfterToolCallGateFn = Callable[[str, dict[str, Any], Any], Any]
 ```
 
-- `BeforeCallGateFn(tool_name, args)` → `ToolCallGateAction` — runs before execution, can allow/deny/modify args.
-- `AfterCallGateFn(tool_name, args, result)` → `result` — runs after execution, can inspect or transform the result before it is returned to the LLM.
+- `BeforeToolCallGateFn(tool_name, args)` → `ToolCallGateAction` — runs before execution, can allow/deny/modify args.
+- `AfterToolCallGateFn(tool_name, args, result)` → `result` — runs after execution, can inspect or transform the result before it is returned to the LLM.
 
 #### ToolCallGate
 
@@ -306,8 +306,8 @@ class ToolCallGate:
     """
 
     # Level 1: Static
-    before_call: BeforeCallGateFn | None = None
-    after_call: AfterCallGateFn | None = None
+    before_call: BeforeToolCallGateFn | None = None
+    after_call: AfterToolCallGateFn | None = None
 
     # Level 2: User
     user_confirm: bool = False
@@ -347,25 +347,25 @@ When HarnessAgent pauses with a `ToolCallConfirmEvent`, the user resumes by pass
 class ToolCallConfirm:
     """User's response to a ToolCallConfirmEvent.
 
-    Wraps a ToolCallGateAction — the same type that static gate callbacks return.
+    Wraps a ToolCallGateAction internally and can be encoded as Content.
     """
     call_id: str
     action: ToolCallGateAction
 
     @staticmethod
-    def approve(call_id: str) -> ToolCallConfirm:
-        """Approve the tool call as-is."""
-        return ToolCallConfirm(call_id, ToolCallGateAction.allow())
+    def approve(call_id: str) -> Content:
+        """Approve the tool call as-is and return Content."""
+        return ToolCallConfirm(call_id, ToolCallGateAction.allow()).to_content()
 
     @staticmethod
-    def reject(call_id: str, reason: str = "") -> ToolCallConfirm:
+    def reject(call_id: str, reason: str = "") -> Content:
         """Reject the tool call. The reason is returned to the LLM."""
-        return ToolCallConfirm(call_id, ToolCallGateAction.deny(reason))
+        return ToolCallConfirm(call_id, ToolCallGateAction.deny(reason)).to_content()
 
     @staticmethod
-    def modify(call_id: str, modified_args: dict[str, Any]) -> ToolCallConfirm:
-        """Approve the tool call with modified args."""
-        return ToolCallConfirm(call_id, ToolCallGateAction.allow(modified_args))
+    def modify(call_id: str, modified_args: dict[str, Any]) -> Content:
+        """Approve the tool call with modified args and return Content."""
+        return ToolCallConfirm(call_id, ToolCallGateAction.allow(modified_args)).to_content()
 ```
 
 ### HarnessAgent Outer Loop — Tool Execution Controller
@@ -513,7 +513,7 @@ trpc_agent_sdk/harness/
 ├── _core/
 │   ├── __init__.py
 │   └── _tool_call_gate.py         # ToolCallGate, ToolCallGateAction,
-│                                  #   ToolCallConfirm, BeforeCallGateFn, AfterCallGateFn
+│                                  #   ToolCallConfirm, BeforeToolCallGateFn, AfterToolCallGateFn
 ├── _policy/
 │   ├── __init__.py
 │   ├── _base.py                   # HarnessPolicy, PolicyPlan
